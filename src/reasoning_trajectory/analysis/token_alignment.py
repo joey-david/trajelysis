@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from reasoning_trajectory.models.hf_loader import load_hf_tokenizer
 from reasoning_trajectory.runtime.config import load_config
 
 
@@ -22,6 +21,7 @@ def build_token_spans(
         return [[] for _ in rows]
     try:
         from tokenizers.decoders import DecodeStream
+        from reasoning_trajectory.models.hf_loader import load_hf_tokenizer
 
         tokenizer = load_hf_tokenizer(model_cfg)
         return [token_spans_for_row(tokenizer, row, DecodeStream) for row in rows]
