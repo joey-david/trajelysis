@@ -1,11 +1,9 @@
-"""Align generated token IDs with character spans in decoded transcripts."""
+"""Approximate generated-token character spans without loading a tokenizer."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-
-from reasoning_trajectory.runtime.config import load_config
 
 
 TokenSpan = tuple[int, int] | None
@@ -15,57 +13,31 @@ def build_token_spans(
     run_path: Path,
     rows: list[dict[str, Any]],
 ) -> list[list[TokenSpan]]:
-    """Map generated token indices to exact decoded-text character spans when possible."""
-    model_cfg = load_config(run_path).get("model", {})
-    if model_cfg.get("backend", "hf") != "hf":
-        return [[] for _ in rows]
-    try:
-        from tokenizers.decoders import DecodeStream
-        from reasoning_trajectory.models.hf_loader import load_hf_tokenizer
+    """Map token indices to approximate character spans using stored text only.
 
-        tokenizer = load_hf_tokenizer(model_cfg)
-        return [token_spans_for_row(tokenizer, row, DecodeStream) for row in rows]
-    except (ImportError, OSError, TypeError, ValueError, NotImplementedError) as error:
-        print(f"token alignment unavailable: {error}")
-        return [[] for _ in rows]
+    Analysis of an existing run is self-contained: opening the web UI must not
+    contact Hugging Face or reload a model/tokenizer. Exact token boundaries are
+    therefore traded for deterministic proportional spans.
+    """
+    del run_path
+    return [approximate_token_spans(row) for row in rows]
 
 
-def token_spans_for_row(
-    tokenizer: Any,
-    row: dict[str, Any],
-    decode_stream_type: Any | None = None,
-) -> list[TokenSpan]:
-    generated_ids = [int(token_id) for token_id in row.get("generated_token_ids", [])]
-    text = row.get("produced_text", "")
-    if not generated_ids or not text:
-        return [None] * len(generated_ids)
+def approximate_token_spans(row: dict[str, Any]) -> list[TokenSpan]:
+    """Return deterministic proportional character spans for stored tokens."""
+    token_count = len(row.get("generated_token_ids", []))
+    text = str(row.get("produced_text", ""))
+    if token_count <= 0:
+        return []
+    if not text:
+        return [None] * token_count
 
-    if decode_stream_type is None:
-        from tokenizers.decoders import DecodeStream
-
-        decode_stream_type = DecodeStream
-    stream = decode_stream_type(skip_special_tokens=True)
-    pieces = [
-        stream.step(tokenizer.backend_tokenizer, token_id) or ""
-        for token_id in generated_ids
-    ]
-    if "".join(pieces) != text:
-        return [None] * len(generated_ids)
-
-    spans: list[TokenSpan] = [None] * len(pieces)
-    char_start = 0
-    pending: list[int] = []
-    for token_idx, piece in enumerate(pieces):
-        pending.append(token_idx)
-        if not piece:
-            continue
-        char_end = char_start + len(piece)
-        for pending_idx in pending:
-            spans[pending_idx] = (char_start, char_end)
-        pending.clear()
-        char_start = char_end
-    for pending_idx in pending:
-        spans[pending_idx] = (char_start, char_start)
+    text_len = len(text)
+    spans: list[TokenSpan] = []
+    for token_idx in range(token_count):
+        start = round(token_idx * text_len / token_count)
+        end = round((token_idx + 1) * text_len / token_count)
+        spans.append((start, max(start, end)))
     return spans
 
 
