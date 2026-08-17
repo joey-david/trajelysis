@@ -1,0 +1,112 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$ROOT"
+
+PYTHON=${PYTHON:-python3}
+VENV="$ROOT/.venv"
+EXAMPLE="examples/qwen3-4b-polymath.yaml"
+CONFIG="config.yaml"
+
+printf '\nTrajelysis setup\n===============\n\n'
+
+if ! command -v "$PYTHON" >/dev/null 2>&1; then
+  echo "Python 3 was not found. Install Python 3.10+ and rerun ./setup." >&2
+  exit 1
+fi
+
+"$PYTHON" - <<'PY'
+import sys
+if sys.version_info < (3, 10):
+    raise SystemExit("Trajelysis requires Python 3.10+.")
+print(f"Python {sys.version.split()[0]}")
+PY
+
+if [ ! -d "$VENV" ]; then
+  echo "Creating .venv..."
+  "$PYTHON" -m venv "$VENV"
+else
+  echo "Using existing .venv."
+fi
+
+PIP="$VENV/bin/python -m pip"
+
+install_models=yes
+if [ -t 0 ]; then
+  printf '\nInstall Hugging Face generation support (PyTorch, Transformers, datasets)? [Y/n] '
+  read answer || answer=
+  case "$answer" in
+    n|N|no|NO) install_models=no ;;
+  esac
+fi
+
+$PIP install --upgrade pip
+if [ "$install_models" = yes ]; then
+  echo "Installing Trajelysis with generation support..."
+  $PIP install -e ".[models]"
+else
+  echo "Installing analysis-only Trajelysis..."
+  $PIP install -e .
+fi
+
+if [ ! -f "$CONFIG" ]; then
+  cp "$EXAMPLE" "$CONFIG"
+  echo "Created config.yaml from the small Qwen3-4B + PolyMath example."
+else
+  echo "Keeping existing config.yaml."
+fi
+
+printf '\nA config describes four main things:\n\n'
+"$VENV/bin/python" - <<'PY'
+from pathlib import Path
+import yaml
+
+cfg = yaml.safe_load(Path("config.yaml").read_text()) or {}
+model = cfg.get("model", {})
+dataset = cfg.get("dataset", {})
+generation = cfg.get("generation", {})
+capture = cfg.get("capture", {})
+
+print(f"  model      {model.get('name', '?')}")
+print(f"  dataset    {dataset.get('path', '?')} / {dataset.get('split', 'train')}")
+print(f"  samples    {dataset.get('sample_limit', 'all')} selected examples")
+print(f"  repeats    {generation.get('num_samples_per_item', 1)} generations per example")
+print(f"  capture    layers {capture.get('layers', [-1])}")
+PY
+
+printf '\nEdit config.yaml to change the model, dataset, sample selection, repeats, decoding, or captured layers.\n'
+
+if [ -t 0 ]; then
+  printf 'Show the full example config now? [Y/n] '
+  read answer || answer=
+  case "$answer" in
+    n|N|no|NO) ;;
+    *)
+      printf '\n--- config.yaml ---\n'
+      cat "$CONFIG"
+      printf '%s\n' '--- end config ---'
+      ;;
+  esac
+fi
+
+printf '\nSetup complete.\n\n'
+printf 'Activate the environment:\n  source .venv/bin/activate\n\n'
+printf 'Then the normal workflow is just:\n  trajelysis run\n  trajelysis web\n\n'
+printf 'Explicit paths also work:\n  trajelysis run path/to/config.yaml path/to/run\n  trajelysis web path/to/run\n\n'
+
+if [ "$install_models" = yes ] && [ -t 0 ]; then
+  printf 'Run the example now? This downloads Qwen3-4B and generates 9 traces. [y/N] '
+  read answer || answer=
+  case "$answer" in
+    y|Y|yes|YES)
+      "$VENV/bin/trajelysis" run
+      printf '\nOpen the web interface now? [Y/n] '
+      read answer || answer=
+      case "$answer" in
+        n|N|no|NO) ;;
+        *) "$VENV/bin/trajelysis" web ;;
+      esac
+      ;;
+  esac
+fi
