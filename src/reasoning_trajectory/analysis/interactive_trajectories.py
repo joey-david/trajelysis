@@ -1,4 +1,4 @@
-"""Build browser-consumable PCA and t-SNE payloads for selected trajectory points."""
+"""Build browser-consumable latent-space projection payloads from stored activations."""
 
 from __future__ import annotations
 
@@ -19,11 +19,27 @@ from reasoning_trajectory.runtime.artifact_store import load_hidden_states_npz
 PointItem = tuple[np.ndarray, dict[str, Any], int, int, str]
 
 
-def write_interactive_trajectories(run_path: Path, cfg: dict[str, Any]) -> None:
+def write_interactive_trajectories(
+    run_path: Path,
+    cfg: dict[str, Any],
+    *,
+    methods: tuple[str, ...] | None = None,
+) -> None:
+    """Project stored hidden states for the browser without re-running the model.
+
+    PCA is the default because it is fast and deterministic. t-SNE remains
+    available explicitly via ``methods=("pca", "tsne")`` or the analysis config
+    key ``interactive_projection_methods``.
+    """
     rows = read_generation_rows(run_path)
     rows = [row for row in rows if row.get("hidden_states_file")]
     if not rows:
         return
+
+    if methods is None:
+        configured = cfg.get("interactive_projection_methods", ["pca"])
+        methods = tuple(str(method).lower() for method in configured)
+    methods = tuple(method for method in methods if method in {"pca", "tsne"}) or ("pca",)
 
     selectors = configured_selectors(cfg)
     token_spans = build_token_spans(run_path, rows)
@@ -51,37 +67,77 @@ def write_interactive_trajectories(run_path: Path, cfg: dict[str, Any]) -> None:
         if len(projection_items) < 3:
             continue
         projection_x = np.stack([item[0] for item in projection_items])
-        projections = {
-            "pca": project_all_with_fitted_pca(items, projection_x),
-            "tsne": project_3d(projection_x)["tsne"],
-        }
-        projection_inputs = {"pca": items, "tsne": projection_items}
-        for method, coords in projections.items():
-            method_items = projection_inputs[method]
-            path = out_dir / f"{method}_layer{layer}_interactive.json"
-            payload = build_payload(
-                method,
+
+        if "pca" in methods:
+            coords = project_all_with_fitted_pca(items, projection_x)
+            _write_projection(
+                run_path,
+                out_dir,
+                manifest,
+                "pca",
                 layer,
                 coords,
-                method_items,
+                items,
                 selectors,
-                max_points=max_points,
-                source_points=len(items),
-                token_spans=token_spans,
+                max_points,
+                len(items),
+                token_spans,
             )
-            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-            manifest.append(
-                {
-                    "method": method,
-                    "layer": layer,
-                    "points": len(method_items),
-                    "source_points": len(items),
-                    "path": path.relative_to(run_path).as_posix(),
-                }
+
+        if "tsne" in methods:
+            coords = project_3d(projection_x)["tsne"]
+            _write_projection(
+                run_path,
+                out_dir,
+                manifest,
+                "tsne",
+                layer,
+                coords,
+                projection_items,
+                selectors,
+                max_points,
+                len(items),
+                token_spans,
             )
 
     (out_dir / "interactive_index.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def _write_projection(
+    run_path: Path,
+    out_dir: Path,
+    manifest: list[dict[str, Any]],
+    method: str,
+    layer: int,
+    coords: np.ndarray,
+    items: list[PointItem],
+    selectors: dict[str, dict[str, Any]],
+    max_points: int,
+    source_points: int,
+    token_spans: list[list[TokenSpan]],
+) -> None:
+    path = out_dir / f"{method}_layer{layer}_interactive.json"
+    payload = build_payload(
+        method,
+        layer,
+        coords,
+        items,
+        selectors,
+        max_points=max_points,
+        source_points=source_points,
+        token_spans=token_spans,
+    )
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    manifest.append(
+        {
+            "method": method,
+            "layer": layer,
+            "points": len(items),
+            "source_points": source_points,
+            "path": path.relative_to(run_path).as_posix(),
+        }
     )
 
 
