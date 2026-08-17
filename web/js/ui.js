@@ -1,3 +1,9 @@
+document.title = "Trajelysis";
+const brandLogo = document.querySelector(".brand-logo");
+const brandTitle = document.querySelector(".brand strong");
+if (brandLogo) brandLogo.textContent = "T";
+if (brandTitle) brandTitle.textContent = "Trajelysis";
+
 export const $ = id => document.getElementById(id);
 
 export async function fetchJson(url) {
