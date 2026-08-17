@@ -208,9 +208,9 @@ def serve_web(
     *,
     port: int = DEFAULT_PORT,
     open_browser: bool = True,
-    analyze: bool = True,
+    analyze: bool = False,
 ) -> None:
-    """Analyze a run when needed and serve it in the bundled static interface."""
+    """Serve an existing populated run in the bundled static interface."""
     run_path = resolve_run_path(run_path)
 
     if analyze:
@@ -290,7 +290,11 @@ def build_parser() -> argparse.ArgumentParser:
     web_parser.add_argument("run_path", nargs="?")
     web_parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     web_parser.add_argument("--no-browser", action="store_true")
-    web_parser.add_argument("--no-analyze", action="store_true")
+    web_parser.add_argument(
+        "--analyze",
+        action="store_true",
+        help="recompute available analysis artifacts before opening the UI",
+    )
 
     analyze_parser = sub.add_parser("analyze", help="analyze an existing run")
     analyze_parser.add_argument("run_path", nargs="?")
@@ -315,7 +319,7 @@ def main(argv: list[str] | None = None) -> int:
             args.run_path,
             port=args.port,
             open_browser=not args.no_browser,
-            analyze=not args.no_analyze,
+            analyze=args.analyze,
         )
     elif args.command == "analyze":
         analyze_run(resolve_run_path(args.run_path))
