@@ -136,34 +136,31 @@ def analyze_run(run_path: str | Path) -> Path:
         if static_index.exists():
             static_index.unlink()
 
-    write_interactive_trajectories(run_path, analysis_cfg)
+    write_interactive_trajectories(run_path, analysis_cfg, methods=("pca", "tsne"))
     write_step_classification(run_path, analysis_cfg)
     print(f"analyzed {run_path}")
     return run_path
 
 
 def ensure_analysis(run_path: str | Path) -> Path:
-    """Make an existing run useful in the web UI without needlessly rebuilding projections."""
+    """Make a run immediately viewable without model/tokenizer downloads or heavy t-SNE work."""
     run_path = Path(run_path).expanduser().resolve()
     config = load_config(run_path)
     analysis_cfg = config.get("analysis", {})
 
-    # These passes are cheap and keep correctness/summary metadata in sync.
+    # Cheap, local-only passes: score existing text and refresh browser metadata.
     update_answers(run_path, analysis_cfg)
     write_step_markers(run_path, analysis_cfg)
     write_solution_objects(run_path, analysis_cfg)
     write_hard_questions(run_path, analysis_cfg)
 
+    # If no latent browser artifact was copied, derive only a fast PCA from the
+    # already-saved NPZ activations. Never rerun the model and never hit HF Hub.
     if _has_hidden_states(run_path):
         interactive_index = run_path / "analysis" / "plots" / "interactive_index.json"
         if not interactive_index.exists() or not _load_json(interactive_index, []):
-            print("building missing latent projections...")
-            write_interactive_trajectories(run_path, analysis_cfg)
-
-        step_index = run_path / "analysis" / "step_classification" / "interactive_index.json"
-        if not step_index.exists() or not _load_json(step_index, []):
-            print("building missing step-classification projections...")
-            write_step_classification(run_path, analysis_cfg)
+            print("building missing PCA projection from stored activations...")
+            write_interactive_trajectories(run_path, analysis_cfg, methods=("pca",))
 
     return run_path
 
