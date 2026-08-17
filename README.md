@@ -6,7 +6,7 @@
 
 <!-- Replace this block with the final demo video once recorded. -->
 
-https://github.com/user-attachments/assets/VIDEO_PLACEHOLDER
+<https://github.com/user-attachments/assets/12e900d3-f216-43ef-a142-f0e85ad7e738>
 
 </div>
 
