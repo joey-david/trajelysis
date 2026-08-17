@@ -30,8 +30,6 @@ else
   echo "Using existing .venv."
 fi
 
-PIP="$VENV/bin/python -m pip"
-
 install_models=yes
 if [ -t 0 ]; then
   printf '\nInstall Hugging Face generation support (PyTorch, Transformers, datasets)? [Y/n] '
@@ -41,13 +39,13 @@ if [ -t 0 ]; then
   esac
 fi
 
-$PIP install --upgrade pip
+"$VENV/bin/python" -m pip install --upgrade pip
 if [ "$install_models" = yes ]; then
   echo "Installing Trajelysis with generation support..."
-  $PIP install -e ".[models]"
+  "$VENV/bin/python" -m pip install -e ".[models]"
 else
   echo "Installing analysis-only Trajelysis..."
-  $PIP install -e .
+  "$VENV/bin/python" -m pip install -e .
 fi
 
 if [ ! -f "$CONFIG" ]; then
