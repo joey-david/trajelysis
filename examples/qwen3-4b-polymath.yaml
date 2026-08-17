@@ -1,3 +1,5 @@
+name: qwen3-4b-polymath
+
 model:
   name: Qwen/Qwen3-4B
   backend: hf
