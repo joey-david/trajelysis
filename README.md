@@ -15,11 +15,17 @@ https://github.com/user-attachments/assets/VIDEO_PLACEHOLDER
 ```bash
 git clone https://github.com/joey-david/trajelysis.git
 cd trajelysis
-python3 -m pip install -e ".[models]"
-
-trajelysis run \
-  --config examples/qwen3-4b-polymath.yaml \
-  --out runs/qwen3-4b-polymath
+./setup
+source .venv/bin/activate
 ```
 
-The run config controls the Hugging Face model and dataset, sample selection, repeat count, decoding settings, and layers whose hidden states are captured.
+`./setup` installs Trajelysis, creates a small example `config.yaml`, and explains how model, dataset, sampling, repeats, and captured layers are configured.
+
+Then:
+
+```bash
+trajelysis run
+trajelysis web
+```
+
+`trajelysis run [config] [run]` also accepts explicit paths; `trajelysis web [run]` opens any existing run in the local analysis interface.
