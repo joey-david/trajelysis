@@ -40,23 +40,52 @@ def config_run_path(config_path: str | Path = DEFAULT_CONFIG) -> Path:
     return Path("runs") / name
 
 
-def resolve_run_path(run_path: str | Path | None = None) -> Path:
-    """Resolve an explicit run, the configured default, or the newest local run."""
-    if run_path is not None:
-        return Path(run_path).expanduser().resolve()
+def _generation_file(run_path: str | Path) -> Path:
+    return Path(run_path) / "generation" / "generations.jsonl"
 
+
+def _has_generation_rows(run_path: str | Path) -> bool:
+    """Return whether a run contains at least one non-empty generation row."""
+    path = _generation_file(run_path)
+    if not path.is_file() or path.stat().st_size == 0:
+        return False
+    with path.open("r", encoding="utf-8") as handle:
+        return any(line.strip() for line in handle)
+
+
+def resolve_run_path(run_path: str | Path | None = None) -> Path:
+    """Resolve an explicit run or automatically select a populated local run."""
+    if run_path is not None:
+        candidate = Path(run_path).expanduser().resolve()
+        if not _has_generation_rows(candidate):
+            raise FileNotFoundError(
+                f"No generated traces found in {candidate}. "
+                "Pass a run containing a non-empty generation/generations.jsonl."
+            )
+        return candidate
+
+    # Prefer the run named by config.yaml only when it actually contains traces.
     if DEFAULT_CONFIG.exists():
         candidate = config_run_path(DEFAULT_CONFIG).resolve()
-        if candidate.exists():
+        if _has_generation_rows(candidate):
             return candidate
 
-    candidates = list(Path("runs").glob("**/generation/generations.jsonl"))
+    # Otherwise discover every populated run recursively and choose the newest.
+    candidates = []
+    for generations in Path("runs").glob("**/generation/generations.jsonl"):
+        run = generations.parent.parent
+        if _has_generation_rows(run):
+            candidates.append(generations)
+
     if candidates:
         newest = max(candidates, key=lambda path: path.stat().st_mtime)
-        return newest.parent.parent.resolve()
+        selected = newest.parent.parent.resolve()
+        print(f"auto-selected populated run: {selected}")
+        return selected
 
     raise FileNotFoundError(
-        "No run found. Run `trajelysis run` first or pass a run directory."
+        "No populated run found under runs/. `trajelysis web` needs at least one "
+        "non-empty generation/generations.jsonl, or an explicit run directory."
     )
 
 
@@ -183,9 +212,6 @@ def serve_web(
 ) -> None:
     """Analyze a run when needed and serve it in the bundled static interface."""
     run_path = resolve_run_path(run_path)
-    generations = run_path / "generation" / "generations.jsonl"
-    if not generations.exists():
-        raise FileNotFoundError(f"No generated traces found in {run_path}")
 
     if analyze:
         analyze_run(run_path)
