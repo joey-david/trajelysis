@@ -90,7 +90,11 @@ fi
 
 printf '\nSetup complete.\n\n'
 printf 'Activate the environment:\n  source .venv/bin/activate\n\n'
-printf 'Then the normal workflow is just:\n  trajelysis run\n  trajelysis web\n\n'
+if [ "$install_models" = yes ]; then
+  printf 'Then the normal workflow is just:\n  trajelysis run\n  trajelysis web\n\n'
+else
+  printf 'Open an existing run with:\n  trajelysis web path/to/run\n\n'
+fi
 printf 'Explicit paths also work:\n  trajelysis run path/to/config.yaml path/to/run\n  trajelysis web path/to/run\n\n'
 
 if [ "$install_models" = yes ] && [ -t 0 ]; then
